@@ -89,6 +89,10 @@ def main():
                         help='path to nnU-Net checkpoint file to be used as pretrained model (use .model '
                              'file, for example model_final_checkpoint.model). Will only be used when actually training. '
                              'Optional. Beta. Use with caution.')
+    ##-- zxc Added by Camila
+    parser.add_argument("-epoch_number", type=int, required=False, default=1000, help="use this to indicate number of epochs desired for training")
+    parser.add_argument("-learning_rate", type=float, required=False, default=1e-2, help="use this to indicate initial desired for training")
+    #--
 
     args = parser.parse_args()
 
@@ -114,6 +118,11 @@ def main():
     # interp_order = args.interp_order
     # interp_order_z = args.interp_order_z
     # force_separate_z = args.force_separate_z
+
+    ##-- zxc Added by Camila
+    epoch_number = args.epoch_number
+    learning_rate = args.learning_rate
+    ##--
 
     if not task.startswith("Task"):
         task_id = int(task)
@@ -159,6 +168,14 @@ def main():
         trainer.save_intermediate_checkpoints = True  # whether or not to save checkpoint_latest. We need that in case
         # the training chashes
         trainer.save_latest_only = True  # if false it will not store/overwrite _latest but separate files each
+
+
+    ##-- zxc Added by Camila
+    if epoch_number:
+        trainer.set_epochs(epoch_number)
+    if learning_rate:
+        trainer.set_lr(learning_rate)
+    ##--
 
     trainer.initialize(not validation_only)
 

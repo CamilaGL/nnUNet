@@ -2,6 +2,7 @@ from nnunet.utilities.visdomvisualiser import get_plotter
 from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 import matplotlib
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 class mynnUNetTrainerV2(nnUNetTrainerV2):
 
@@ -11,12 +12,11 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
                          deterministic, fp16)
         self.max_num_epochs = 250
 
-        task = self.dataset_directory.split("/")[-1]
-        job_name = self.experiment_name
-        self.my_name = task+"_"+job_name
+        #task = self.dataset_directory.split("/")[-1]
+        #job_name = self.experiment_name
+        #self.my_name = task+"_"+job_name
         # setup the visualizer
         # define config element
-        self.plotter = get_plotter(self.my_name)
 
     def set_epochs(self, epochs = 250):
         self.max_num_epochs = epochs
@@ -28,6 +28,11 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         '''
         Print keys to visdom and set number of epochs
         '''
+        self.plotter = get_plotter(self.model_name)
+        timestamp = datetime.now()
+        self.plotter.plot_text("Initialising this model: %s <br> on %d_%d_%d_%02.0d_%02.0d_%02.0d" %
+                                    (self.model_name,timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.minute,
+                                    timestamp.second), plot_name="Welcome")
         super().initialize(training, force_load_plans)
         if training:
             self.plotter.plot_text("EPOCHS: %s <br> LEARNING RATE: %s <br> TRAINING KEYS: %s <br> VALIDATION KEYS: %s" % (str(self.max_num_epochs),str(self.initial_lr),str(self.dataset_tr.keys()),str(self.dataset_val.keys())), plot_name="Dataset_Info")
@@ -41,7 +46,7 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         """
         
         font = {'weight': 'normal',
-                'size': 4.5}
+                'size': 8}
 
         matplotlib.rc('font', **font)
 
@@ -65,7 +70,7 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         ax2.set_ylabel("evaluation metric")
         ax.legend()
         ax2.legend(loc=9)
-        self.plotter.plot_matplotlib(plt, self.my_name+"eval")
+        self.plotter.plot_matplotlib(plt, "theplot")
         #fig.savefig(join(self.output_folder, "progress.png"))
         plt.close()
         
@@ -80,7 +85,3 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         self.plot_to_visdom()
         self.plotter.plot_text("Best epoch: %s<br> With eval criterion: %s <br>" % (self.best_epoch_based_on_MA_tr_loss, self.best_val_eval_criterion_MA), plot_name="Best_epoch")
         return continue_training
-
-
-
-    

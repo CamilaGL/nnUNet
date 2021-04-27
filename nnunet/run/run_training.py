@@ -92,6 +92,7 @@ def main():
     ##-- zxc Added by Camila
     parser.add_argument("-epoch_number", type=int, required=False, default=1000, help="use this to indicate number of epochs desired for training")
     parser.add_argument("-learning_rate", type=float, required=False, default=1e-2, help="use this to indicate initial desired for training")
+    parser.add_argument("-ft_task", type=int, required=False, default=None, help="use this to indicate which model is being fine-tuned")
     #--
 
     args = parser.parse_args()
@@ -119,10 +120,6 @@ def main():
     # interp_order_z = args.interp_order_z
     # force_separate_z = args.force_separate_z
 
-    ##-- zxc Added by Camila
-    epoch_number = args.epoch_number
-    learning_rate = args.learning_rate
-    ##--
 
     if not task.startswith("Task"):
         task_id = int(task)
@@ -132,6 +129,18 @@ def main():
         pass
     else:
         fold = int(fold)
+
+
+    ##-- zxc Added by Camila
+    epoch_number = args.epoch_number
+    learning_rate = args.learning_rate
+    ft_task = args.ft_task
+    if args.ft_task is None:
+        ft_task = task
+    model_name = ""
+    if network_trainer == "mynnUNetTrainerV2":
+        model_name = "_%s_%s_%s_%03.0d_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate))
+    ##--
 
     # if force_separate_z == "None":
     #     force_separate_z = None
@@ -175,6 +184,7 @@ def main():
         trainer.set_epochs(epoch_number)
     if learning_rate:
         trainer.set_lr(learning_rate)
+    trainer.set_model_name(model_name)
     ##--
 
     trainer.initialize(not validation_only)

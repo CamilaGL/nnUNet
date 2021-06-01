@@ -3,6 +3,7 @@ from nnunet.training.network_training.nnUNetTrainerV2 import nnUNetTrainerV2
 import matplotlib
 import matplotlib.pyplot as plt
 from datetime import datetime
+import torch
 
 class mynnUNetTrainerV2(nnUNetTrainerV2):
 
@@ -11,7 +12,8 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data,
                          deterministic, fp16)
         self.max_num_epochs = 250
-
+        self.freeze = False
+        self.unfreeze = 0
         #task = self.dataset_directory.split("/")[-1]
         #job_name = self.experiment_name
         #self.my_name = task+"_"+job_name
@@ -24,18 +26,33 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
     def set_lr(self, lr = 1e-2):
         self.initial_lr = lr
 
+    def set_freeze(self, unfreeze=1):
+        self.freeze = True
+        self.unfreeze = unfreeze
+
     def initialize(self, training=True, force_load_plans=False):
         '''
         Print keys to visdom and set number of epochs
         '''
-        self.plotter = get_plotter(self.model_name)
         timestamp = datetime.now()
-        self.plotter.plot_text("Initialising this model: %s <br> on %d_%d_%d_%02.0d_%02.0d_%02.0d" %
+
+        try:
+            self.plotter = get_plotter(self.model_name)
+            self.plotter.plot_text("Initialising this model: %s <br> on %d_%d_%d_%02.0d_%02.0d_%02.0d" %
                                     (self.model_name,timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.minute,
                                     timestamp.second), plot_name="Welcome")
+        except:
+            print("Unable to connect to visdom.")
+
         super().initialize(training, force_load_plans)
+        if self.freeze:
+            self.initialize_optimizer_and_scheduler_freezing()
+
         if training:
-            self.plotter.plot_text("EPOCHS: %s <br> LEARNING RATE: %s <br> TRAINING KEYS: %s <br> VALIDATION KEYS: %s" % (str(self.max_num_epochs),str(self.initial_lr),str(self.dataset_tr.keys()),str(self.dataset_val.keys())), plot_name="Dataset_Info")
+            try:
+                self.plotter.plot_text("EPOCHS: %s <br> LEARNING RATE: %s <br> TRAINING KEYS: %s <br> VALIDATION KEYS: %s" % (str(self.max_num_epochs),str(self.initial_lr),str(self.dataset_tr.keys()),str(self.dataset_val.keys())), plot_name="Dataset_Info")
+            except:
+                print("Unable to connect to visdom.")
         
     
     def plot_to_visdom(self):
@@ -82,6 +99,48 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         :return:
         """
         continue_training = super().on_epoch_end()
-        self.plot_to_visdom()
-        self.plotter.plot_text("Best epoch: %s<br> With eval criterion: %s <br>" % (self.best_epoch_based_on_MA_tr_loss, self.best_val_eval_criterion_MA), plot_name="Best_epoch")
+
+        try:
+            self.plot_to_visdom()
+            self.plotter.plot_text("Best epoch: %s<br> With eval criterion: %s <br>" % (self.best_epoch_based_on_MA_tr_loss, self.best_val_eval_criterion_MA), plot_name="Best_epoch")
+        except:
+            print("Unable to connect to visdom.")
+        
         return continue_training
+
+
+    ## ------------ added by Camila
+
+    def reinit_optim(self):
+        '''Required if load pretrained weights'''
+        if self.freeze:
+            self.initialize_optimizer_and_scheduler_freezing()
+
+    def initialize_optimizer_and_scheduler_freezing(self):
+        assert self.network is not None, "self.initialize_network must be called first"
+
+        ## somehow look for all layers
+        for param in self.network.parameters():
+            param.requires_grad = False #Freeze it all
+
+        #should do this for last self.unfreeze number of layers
+        #not sure if last convtranspose before last computational block should be excluded?
+        # for param in self.network.tu[-1].parameters()
+        #     param.requires_grad = True 
+        #last computational block
+        for param in self.network.conv_blocks_localization[-1].parameters():
+            param.requires_grad = True 
+        #last segmentation layer
+        for param in self.network.seg_outputs[-1].parameters():
+            param.requires_grad = True 
+
+        # print("\n\n ------------------ not frozen --------------------")
+        # for unf in filter(lambda p: p.requires_grad,self.network.parameters()):
+        #     print(unf)
+        # print("\n\n\n")
+
+        self.optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,self.network.parameters()), self.initial_lr, weight_decay=self.weight_decay,
+                                         momentum=0.99, nesterov=True)
+        self.lr_scheduler = None
+
+    ## ------------- end added by Camila

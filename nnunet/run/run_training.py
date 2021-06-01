@@ -93,6 +93,7 @@ def main():
     parser.add_argument("-epoch_number", type=int, required=False, default=1000, help="use this to indicate number of epochs desired for training")
     parser.add_argument("-learning_rate", type=float, required=False, default=1e-2, help="use this to indicate initial desired for training")
     parser.add_argument("-ft_task", type=int, required=False, default=None, help="use this to indicate which model is being fine-tuned")
+    parser.add_argument("-freeze", type=int, required=False, default=0, help="use this to freeze layers, indicating how many are to be unfreezed")
     #--
 
     args = parser.parse_args()
@@ -135,11 +136,16 @@ def main():
     epoch_number = args.epoch_number
     learning_rate = args.learning_rate
     ft_task = args.ft_task
+    freeze = args.freeze
     if args.ft_task is None:
         ft_task = task
     model_name = ""
     if network_trainer == "mynnUNetTrainerV2":
-        model_name = "_%s_%s_%s_%03.0d_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate))
+        if freeze==0:
+            model_name = "_%s_%s_%s_%03.0d_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate))
+        else:
+            model_name = "_%s_%s_UF%s_%s_%03.0d_%s" % (ft_task,str(task),str(freeze),str(fold),epoch_number,str(learning_rate))
+
     ##--
 
     # if force_separate_z == "None":
@@ -185,6 +191,8 @@ def main():
     if learning_rate:
         trainer.set_lr(learning_rate)
     trainer.set_model_name(model_name)
+    if freeze!=0:
+        trainer.set_freeze(freeze)
     ##--
 
     trainer.initialize(not validation_only)
@@ -199,6 +207,10 @@ def main():
             elif (not args.continue_training) and (args.pretrained_weights is not None):
                 # we start a new training. If pretrained_weights are set, use them
                 load_pretrained_weights(trainer.network, args.pretrained_weights)
+                #------------- added by Camila
+                if freeze!=0 and network_trainer == "mynnUNetTrainerV2":
+                    trainer.reinit_optim()
+                #------------- end added by Camila
             else:
                 # new training without pretraine weights, do nothing
                 pass

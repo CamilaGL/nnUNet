@@ -47,7 +47,11 @@ class Evaluator:
         "True Negative Rate",
         "False Discovery Rate",
         "Total Positives Test",
-        "Total Positives Reference"
+        "Total Positives Reference",
+        "True Positives",
+        "False Positives",
+        "True Negatives",
+        "False Negatives"
     ]
 
     default_advanced_metrics = [
@@ -353,6 +357,7 @@ def aggregate_scores(test_ref_pairs,
     all_scores = OrderedDict()
     all_scores["all"] = []
     all_scores["mean"] = OrderedDict()
+    all_scores["sum"] = OrderedDict()
 
     test = [i[0] for i in test_ref_pairs]
     ref = [i[1] for i in test_ref_pairs]
@@ -370,10 +375,22 @@ def aggregate_scores(test_ref_pairs,
                 continue
             if label not in all_scores["mean"]:
                 all_scores["mean"][label] = OrderedDict()
+            # ------- added by Camila
+            if label not in all_scores["sum"]:
+                all_scores["sum"][label] = OrderedDict()
+            # -----------
             for score, value in score_dict.items():
                 if score not in all_scores["mean"][label]:
                     all_scores["mean"][label][score] = []
+                # ------- added by Camila
+                if score not in all_scores["sum"][label] and score in ["True Positives", "False Positives", "True Negatives", "False Negatives"]:
+                    all_scores["sum"][label][score] = []
+                # ----------    
                 all_scores["mean"][label][score].append(value)
+                # ------- added by Camila
+                if score in ["True Positives", "False Positives", "True Negatives", "False Negatives"]:
+                    all_scores["sum"][label][score].append(value)
+                # ---------------
 
     for label in all_scores["mean"]:
         for score in all_scores["mean"][label]:
@@ -381,6 +398,17 @@ def aggregate_scores(test_ref_pairs,
                 all_scores["mean"][label][score] = float(np.nanmean(all_scores["mean"][label][score]))
             else:
                 all_scores["mean"][label][score] = float(np.mean(all_scores["mean"][label][score]))
+    
+    # ------- added by Camila
+    for label in all_scores["sum"]:
+        for score in all_scores["sum"][label]:
+            all_scores["sum"][label][score] = float(np.sum(all_scores["sum"][label][score]))
+        all_scores["sum"]["Sensitivity"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"]))
+        all_scores["sum"]["Specificity"] = float(all_scores["sum"][label]["True Negatives"] / (all_scores["sum"][label]["True Negatives"] + all_scores["sum"][label]["False Positives"]))
+        all_scores["sum"]["Precision"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Positives"]))
+        all_scores["sum"]["Accuracy"] = float((all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["True Negatives"])/ (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"] + all_scores["sum"][label]["True Negatives"]))
+        all_scores["sum"]["DICE"] = float(2.*(all_scores["sum"][label]["True Positives"])/ (2*all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"]))
+    # ------------------
 
     # save to file if desired
     # we create a hopefully unique id by hashing the entire output dictionary

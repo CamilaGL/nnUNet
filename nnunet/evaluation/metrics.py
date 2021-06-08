@@ -382,6 +382,48 @@ def avg_surface_distance_symmetric(test=None, reference=None, confusion_matrix=N
 
     return metric.assd(test, reference, voxel_spacing, connectivity)
 
+## ---------- added by Camila
+def true_positives(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """TP"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    tp, fp, tn, fn = confusion_matrix.get_matrix()
+
+    return tp
+
+def false_positives(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """TP"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    tp, fp, tn, fn = confusion_matrix.get_matrix()
+
+    return fp
+
+def true_negatives(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """TP"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    tp, fp, tn, fn = confusion_matrix.get_matrix()
+
+    return tn
+
+def false_negatives(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """TP"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    tp, fp, tn, fn = confusion_matrix.get_matrix()
+
+    return fn
+## ------------- end added by Camila
+
 
 ALL_METRICS = {
     "False Positive Rate": false_positive_rate,
@@ -402,5 +444,10 @@ ALL_METRICS = {
     "Total Positives Test": total_positives_test,
     "Total Negatives Test": total_negatives_test,
     "Total Positives Reference": total_positives_reference,
-    "total Negatives Reference": total_negatives_reference
+    "total Negatives Reference": total_negatives_reference,
+    ###----------------added by Camila
+    "True Positives": true_positives,
+    "False Positives": false_positives,
+    "True Negatives": true_negatives,
+    "False Negatives": false_negatives
 }

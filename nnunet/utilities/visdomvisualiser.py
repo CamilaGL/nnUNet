@@ -76,8 +76,9 @@ class GenericVisdomPlotter(GenericPlotter):
         # prepare the environment name
         self.env = 'Cami_' + config
         # default host and port
-        hostname = '192.168.7.23'
-        port = 8097
+        hostname = '192.168.7.23' # "deep"
+        baseurl = "/visdom"
+        myport = 80
         # replace host and port by the one provided in the config file
         # if 'hostname' in config['visualization']:
         #     hostname = config['visualization']['hostname']
@@ -85,7 +86,7 @@ class GenericVisdomPlotter(GenericPlotter):
         #     port = int(config['visualization']['port'])
 
         # initialize the object for visualization
-        self.viz = Visdom(server=hostname, port=port)
+        self.viz = Visdom(server=hostname,base_url=baseurl, port=myport, use_incoming_socket=False, use_polling=True)
         # the dictionary of plots and figures
         self.figures = dict()
         self.plots = dict()

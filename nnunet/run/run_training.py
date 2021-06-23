@@ -94,6 +94,7 @@ def main():
     parser.add_argument("-learning_rate", type=float, required=False, default=1e-2, help="use this to indicate initial desired for training")
     parser.add_argument("-ft_task", type=int, required=False, default=None, help="use this to indicate which model is being fine-tuned")
     parser.add_argument("-freeze", type=int, required=False, default=0, help="use this to freeze layers, indicating how many are to be unfreezed")
+    parser.add_argument("--clloss", action='store_true', required=False,default=False, help="use this to indicate centerline loss usage")
     #--
 
     args = parser.parse_args()
@@ -137,14 +138,15 @@ def main():
     learning_rate = args.learning_rate
     ft_task = args.ft_task
     freeze = args.freeze
+    clloss = args.clloss
     if args.ft_task is None:
         ft_task = task
     model_name = ""
     if network_trainer == "mynnUNetTrainerV2":
         if freeze==0:
-            model_name = "_%s_%s_%s_%03.0d_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate))
+            model_name = "_%s_%s_%s_%03.0d_%s_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate), str(clloss))
         else:
-            model_name = "_%s_%s_UF%s_%s_%03.0d_%s" % (ft_task,str(task),str(freeze),str(fold),epoch_number,str(learning_rate))
+            model_name = "_%s_%s_UF%s_%s_%03.0d_%s_%s" % (ft_task,str(task),str(freeze),str(fold),epoch_number,str(learning_rate), str(clloss))
 
     ##--
 
@@ -186,13 +188,16 @@ def main():
 
 
     ##-- zxc Added by Camila
-    if epoch_number:
-        trainer.set_epochs(epoch_number)
-    if learning_rate:
-        trainer.set_lr(learning_rate)
-    trainer.set_model_name(model_name)
-    if freeze!=0:
-        trainer.set_freeze(freeze)
+    if network_trainer == "mynnUNetTrainerV2":
+        if epoch_number:
+            trainer.set_epochs(epoch_number)
+        if learning_rate:
+            trainer.set_lr(learning_rate)
+        trainer.set_model_name(model_name)
+        if freeze!=0:
+            trainer.set_freeze(freeze)
+        if clloss:
+            trainer.set_clloss()
     ##--
 
     trainer.initialize(not validation_only)

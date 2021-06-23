@@ -193,6 +193,123 @@ class SoftDiceLoss(nn.Module):
 
         return -dc
 
+# ------- added by Camila
+
+
+class SoftClDiceLoss(nn.Module):
+    def __init__(self, apply_nonlin=None, batch_dice=False, do_bg=True, smooth=1., k=2):
+        """
+        """
+        super(SoftClDiceLoss, self).__init__()
+
+        self.do_bg = do_bg
+        self.batch_dice = batch_dice
+        self.apply_nonlin = apply_nonlin
+        self.smooth = smooth
+        self.k=k
+
+    def softCenterline(self, I):
+        max = nn.MaxPool3d(3, stride=1, padding=1)
+        relu = nn.ReLU()
+        Ip = max(-max(-I))
+        cl = relu(I-Ip)
+        for iter in range(self.k):
+            I = -max(-I)
+            Ip = max(-max(-I))
+            cl = cl + cl*relu(I-Ip)
+        return cl
+
+    def forward(self, x, y, loss_mask=None):
+        shp_x = x.shape
+
+        if self.batch_dice:
+            axes = [0] + list(range(2, len(shp_x)))
+        else:
+            axes = list(range(2, len(shp_x)))
+
+        if self.apply_nonlin is not None:
+            x = self.apply_nonlin(x)
+
+        clp = self.softCenterline(x)
+        cll = self.softCenterline(y)
+
+        tp, fp, fn, tn = get_tp_fp_fn_tn(x, cll, axes, loss_mask, False) #predicted against GT centerline
+        tpc, fpc, fnc, tnc = get_tp_fp_fn_tn(clp, y, axes, loss_mask, False) #predicted centerline against GT
+
+        clp2vollnom = tpc + self.smooth #intersection between prediction centerline and GT
+        clp2vollden = tpc + fpc + self.smooth #all prediction centerline (all positives)
+        clp2voll = clp2vollnom/clp2vollden
+
+        cll2volpnom = tp + self.smooth #intersection between prediction and GT centerline
+        cll2volpden = tp + fn + self.smooth #all GT centerline (true positives and false negatives)
+        cll2volp = cll2volpnom/cll2volpden
+
+        dc = (2*clp2voll*cll2volp) / (cll2volp+clp2voll + 1e-8)
+
+        if not self.do_bg:
+            if self.batch_dice:
+                dc = dc[1:]
+            else:
+                dc = dc[:, 1:]
+        dc = dc.mean()
+        
+        return -dc
+
+class DC_and_ClDC_loss(nn.Module):
+    def __init__(self, soft_dice_kwargs, soft_cldice_kwargs, aggregate="sum", square_dice=False, weight_cldice=0.5, weight_dice=0.5,
+                 log_dice=False, ignore_label=None):
+        """
+        CAREFUL. Weights for CE and Dice do not need to sum to one. You can set whatever you want.
+        :param soft_dice_kwargs:
+        :param ce_kwargs:
+        :param aggregate:
+        :param square_dice:
+        :param weight_ce:
+        :param weight_dice:
+        """
+        super(DC_and_ClDC_loss, self).__init__()
+        
+        self.log_dice = log_dice
+        self.weight_dice = weight_dice
+        self.weight_cldice = weight_cldice
+        self.aggregate = aggregate
+
+        self.ignore_label = ignore_label
+
+        if not square_dice:
+            self.dc = SoftDiceLoss(apply_nonlin=softmax_helper, **soft_dice_kwargs)
+        else:
+            self.dc = SoftDiceLossSquared(apply_nonlin=softmax_helper, **soft_dice_kwargs)
+        self.cldc = SoftClDiceLoss(apply_nonlin=softmax_helper, **soft_cldice_kwargs)
+
+    def forward(self, net_output, target):
+        """
+        target must be b, c, x, y(, z) with c=1
+        :param net_output:
+        :param target:
+        :return:
+        """
+        if self.ignore_label is not None:
+            assert target.shape[1] == 1, 'not implemented for one hot encoding'
+            mask = target != self.ignore_label
+            target[~mask] = 0
+            mask = mask.float()
+        else:
+            mask = None
+
+        dc_loss = self.dc(net_output, target, loss_mask=mask) if self.weight_dice != 0 else 0
+        if self.log_dice:
+            dc_loss = -torch.log(-dc_loss)
+
+        cldc_loss = self.cldc(net_output, target, loss_mask=mask) if self.weight_cldice != 0 else 0
+
+        if self.aggregate == "sum":
+            result = self.weight_cldice * cldc_loss + self.weight_dice * dc_loss
+        else:
+            raise NotImplementedError("Not implemented") # reserved for other stuff (later)
+        return result 
+
+# --------- end added by Camila
 
 class MCCLoss(nn.Module):
     def __init__(self, apply_nonlin=None, batch_mcc=False, do_bg=True, smooth=0.0):

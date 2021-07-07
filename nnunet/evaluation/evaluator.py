@@ -51,7 +51,8 @@ class Evaluator:
         "True Positives",
         "False Positives",
         "True Negatives",
-        "False Negatives"
+        "False Negatives",
+        "clDice"
     ]
 
     default_advanced_metrics = [
@@ -71,6 +72,10 @@ class Evaluator:
 
         self.test = None
         self.reference = None
+        #------- added by Camila
+        self.testcl = None
+        self.referencecl = None
+        # -------- end added by Camila
         self.confusion_matrix = ConfusionMatrix()
         self.labels = None
         self.nan_for_nonexisting = nan_for_nonexisting
@@ -109,6 +114,20 @@ class Evaluator:
         """Set the reference segmentation."""
 
         self.reference = reference
+
+    # ---------- added by Camila
+
+    def set_testcl(self, testcl):
+        """Set the test segmentation."""
+
+        self.testcl = testcl
+
+    def set_referencecl(self, referencecl):
+        """Set the reference segmentation."""
+
+        self.referencecl = referencecl
+
+    # ---------- end added by Camila
 
     def set_labels(self, labels):
         """Set the labels.
@@ -201,6 +220,10 @@ class Evaluator:
                 if not hasattr(label, "__iter__"):
                     self.confusion_matrix.set_test(self.test == label)
                     self.confusion_matrix.set_reference(self.reference == label)
+                    # --- added by Camila
+                    self.confusion_matrix.set_testcl(self.testcl == label)
+                    self.confusion_matrix.set_referencecl(self.referencecl == label)
+                    ## ------------------
                 else:
                     current_test = 0
                     current_reference = 0
@@ -221,6 +244,10 @@ class Evaluator:
                 self.result[k] = OrderedDict()
                 self.confusion_matrix.set_test(self.test == l)
                 self.confusion_matrix.set_reference(self.reference == l)
+                # --- added by Camila
+                self.confusion_matrix.set_testcl(self.testcl == l)
+                self.confusion_matrix.set_referencecl(self.referencecl == l)
+                ## ------------------
                 for metric in eval_metrics:
                     self.result[k][metric] = _funcs[metric](confusion_matrix=self.confusion_matrix,
                                                             nan_for_nonexisting=self.nan_for_nonexisting,
@@ -276,6 +303,8 @@ class NiftiEvaluator(Evaluator):
 
         self.test_nifti = None
         self.reference_nifti = None
+        self.test_nifti_cl = None
+        self.reference_nifti_cl = None
         super(NiftiEvaluator, self).__init__(*args, **kwargs)
 
     def set_test(self, test):
@@ -298,6 +327,35 @@ class NiftiEvaluator(Evaluator):
             self.reference_nifti = None
             super(NiftiEvaluator, self).set_reference(reference)
 
+    # -------- added by Camila
+
+    def computeThinningSITK(self, inputImage):
+        thinningFilter = sitk.BinaryThinningImageFilter()
+        thinnedImage = thinningFilter.Execute(inputImage)
+        return thinnedImage
+
+    def set_testcl(self):
+        """Set the test segmentation."""
+
+        if self.test_nifti is not None:            
+            self.test_nifticl = self.computeThinningSITK(self.test_nifti)
+            super(NiftiEvaluator, self).set_testcl(sitk.GetArrayFromImage(self.test_nifticl))
+        else:
+            self.test_nifticl = None
+            super(NiftiEvaluator, self).set_testcl(None)
+
+    def set_referencecl(self):
+        """Set the reference segmentation."""
+
+        if self.reference_nifti is not None:
+            self.reference_nifticl = self.computeThinningSITK(self.reference_nifti)
+            super(NiftiEvaluator, self).set_referencecl(sitk.GetArrayFromImage(self.reference_nifticl))
+        else:
+            self.reference_nifticl = None
+            super(NiftiEvaluator, self).set_referencecl(None)
+
+    # ----------- end added by Camila
+
     def evaluate(self, test=None, reference=None, voxel_spacing=None, **metric_kwargs):
 
         if voxel_spacing is None:
@@ -312,6 +370,10 @@ def run_evaluation(args):
     # evaluate
     evaluator.set_test(test)
     evaluator.set_reference(ref)
+    #------ added by Camila
+    evaluator.set_testcl()
+    evaluator.set_referencecl()
+    #---------- end added by Camila
     if evaluator.labels is None:
         evaluator.construct_labels()
     current_scores = evaluator.evaluate(**metric_kwargs)
@@ -383,12 +445,12 @@ def aggregate_scores(test_ref_pairs,
                 if score not in all_scores["mean"][label]:
                     all_scores["mean"][label][score] = []
                 # ------- added by Camila
-                if score not in all_scores["sum"][label] and score in ["True Positives", "False Positives", "True Negatives", "False Negatives"]:
+                if score not in all_scores["sum"][label] and score in ["True Positives", "False Positives", "True Negatives", "False Negatives", "clDice"]:
                     all_scores["sum"][label][score] = []
                 # ----------    
                 all_scores["mean"][label][score].append(value)
                 # ------- added by Camila
-                if score in ["True Positives", "False Positives", "True Negatives", "False Negatives"]:
+                if score in ["True Positives", "False Positives", "True Negatives", "False Negatives", "clDice"]:
                     all_scores["sum"][label][score].append(value)
                 # ---------------
 
@@ -403,11 +465,13 @@ def aggregate_scores(test_ref_pairs,
     for label in all_scores["sum"]:
         for score in all_scores["sum"][label]:
             all_scores["sum"][label][score] = float(np.sum(all_scores["sum"][label][score]))
-        all_scores["sum"]["Sensitivity"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"]))
-        all_scores["sum"]["Specificity"] = float(all_scores["sum"][label]["True Negatives"] / (all_scores["sum"][label]["True Negatives"] + all_scores["sum"][label]["False Positives"]))
-        all_scores["sum"]["Precision"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Positives"]))
-        all_scores["sum"]["Accuracy"] = float((all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["True Negatives"])/ (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"] + all_scores["sum"][label]["True Negatives"]))
-        all_scores["sum"]["DICE"] = float(2.*(all_scores["sum"][label]["True Positives"])/ (2*all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"]))
+    #for label in all_scores["sum"]:
+        all_scores["sum"][label]["Sensitivity"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"]))
+        all_scores["sum"][label]["Specificity"] = float(all_scores["sum"][label]["True Negatives"] / (all_scores["sum"][label]["True Negatives"] + all_scores["sum"][label]["False Positives"]))
+        all_scores["sum"][label]["Precision"] = float(all_scores["sum"][label]["True Positives"] / (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Positives"]))
+        all_scores["sum"][label]["Accuracy"] = float((all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["True Negatives"])/ (all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"] + all_scores["sum"][label]["True Negatives"]))
+        all_scores["sum"][label]["DICE"] = float(2.*(all_scores["sum"][label]["True Positives"])/ (2*all_scores["sum"][label]["True Positives"] + all_scores["sum"][label]["False Negatives"] + all_scores["sum"][label]["False Positives"]))
+        all_scores["sum"][label]["clDice"] = float(all_scores["sum"][label]["clDice"]/len(all_res))
     # ------------------
 
     # save to file if desired

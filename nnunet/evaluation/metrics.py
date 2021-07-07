@@ -48,6 +48,25 @@ class ConfusionMatrix:
         self.reference = reference
         self.reset()
 
+    # ------ added by Camila
+    def set_testcl(self, testcl):
+
+        self.testcl = testcl
+        self.resetcl()
+
+    def set_referencecl(self, referencecl):
+
+        self.referencecl = referencecl
+        self. resetcl()
+
+    def resetcl(self):
+        self.clp2vollintersect = None
+        self.clp2volltotalcl = None
+        self.cll2volpintersect = None
+        self.cll2volptotalcl = None
+    # ------------------------
+    
+
     def reset(self):
 
         self.tp = None
@@ -101,6 +120,29 @@ class ConfusionMatrix:
 
         return self.test_empty, self.test_full, self.reference_empty, self.reference_full
 
+    ## ----------- added by Camila
+    #clDice
+    def compute_clDice(self):
+        if self.testcl is not None and self.referencecl is not None:
+            self.clp2vollintersect = int(((self.testcl != 0) * (self.reference != 0)).sum())
+            self.clp2volltotalcl = int((self.testcl!=0).sum())
+            self.cll2volpintersect = int(((self.referencecl != 0) * (self.test != 0)).sum())
+            self.cll2volptotalcl = int((self.referencecl!=0).sum())
+        else:
+            self.clp2vollintersect = 0
+            self.clp2volltotalcl = 0
+            self.cll2volpintersect = 0
+            self.cll2volptotalcl = 0
+
+    def get_clvalues(self):
+
+        for entry in ( self.clp2vollintersect, self.clp2volltotalcl, self.cll2volpintersect, self.cll2volptotalcl):
+            if entry is None:
+                self.compute_clDice()
+                break
+
+        return self.clp2vollintersect, self.clp2volltotalcl, self.cll2volpintersect, self.cll2volptotalcl
+    # --------------------------------
 
 def dice(test=None, reference=None, confusion_matrix=None, nan_for_nonexisting=True, **kwargs):
     """2TP / (2TP + FP + FN)"""
@@ -422,6 +464,47 @@ def false_negatives(test=None, reference=None, confusion_matrix=None, **kwargs):
     tp, fp, tn, fn = confusion_matrix.get_matrix()
 
     return fn
+
+
+def clrecall(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """cl recall"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_clvalues()
+
+    #print("recall")
+    #print ("%s voxels intersect" % str(clp2vollintersect))
+    #print ("%s voxels are centerline" % str(clp2volltotalcl))
+    clp2voll = float(clp2vollintersect/clp2volltotalcl)
+    return clp2voll
+
+def clprecision(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """cl precision"""
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_clvalues()
+    #print("precision")
+    #print ("%s voxels intersect" % str(cll2volpintersect))
+    #print ("%s voxels are centerline" % str(cll2volptotalcl))
+    cll2volp= float(cll2volpintersect/cll2volptotalcl)
+    return cll2volp
+
+def clDice(test=None, reference=None, confusion_matrix=None, **kwargs):
+    """clDice (paper reference)"""
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_clvalues()
+    #recall
+    clp2voll = float(clp2vollintersect/clp2volltotalcl)
+    #precision
+    cll2volp= float(cll2volpintersect/cll2volptotalcl)
+    return ((2*cll2volp*clp2voll)/(clp2voll+cll2volp))
+
+
 ## ------------- end added by Camila
 
 
@@ -449,5 +532,6 @@ ALL_METRICS = {
     "True Positives": true_positives,
     "False Positives": false_positives,
     "True Negatives": true_negatives,
-    "False Negatives": false_negatives
+    "False Negatives": false_negatives,
+    "clDice": clDice
 }

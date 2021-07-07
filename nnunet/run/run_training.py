@@ -95,6 +95,7 @@ def main():
     parser.add_argument("-ft_task", type=int, required=False, default=None, help="use this to indicate which model is being fine-tuned")
     parser.add_argument("-freeze", type=int, required=False, default=0, help="use this to freeze layers, indicating how many are to be unfreezed")
     parser.add_argument("--clloss", action='store_true', required=False,default=False, help="use this to indicate centerline loss usage")
+    parser.add_argument("--visdom", action='store_true', required=False,default=False, help="use this to indicate visdom usage")
     #--
 
     args = parser.parse_args()
@@ -139,6 +140,7 @@ def main():
     ft_task = args.ft_task
     freeze = args.freeze
     clloss = args.clloss
+    usevisdom = args.visdom
     if args.ft_task is None:
         ft_task = task
     model_name = ""
@@ -198,6 +200,8 @@ def main():
             trainer.set_freeze(freeze)
         if clloss:
             trainer.set_clloss()
+        if usevisdom:
+            trainer.set_visdom()
     ##--
 
     trainer.initialize(not validation_only)

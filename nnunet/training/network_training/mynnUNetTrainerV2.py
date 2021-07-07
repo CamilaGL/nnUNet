@@ -15,6 +15,7 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         self.max_num_epochs = 250
         self.freeze = False
         self.unfreeze = 0
+        self.usevisdom=False
         #task = self.dataset_directory.split("/")[-1]
         #job_name = self.experiment_name
         #self.my_name = task+"_"+job_name
@@ -31,6 +32,9 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         self.freeze = True
         self.unfreeze = unfreeze
 
+    def set_visdom(self):
+        self.usevisdom=True
+
     def set_clloss(self):
 
         self.loss = DC_and_ClDC_loss({'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False}, {'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False, 'k': 5})
@@ -40,20 +44,20 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         Print keys to visdom and set number of epochs
         '''
         timestamp = datetime.now()
-
-        try:
-            self.plotter = get_plotter(self.model_name)
-            self.plotter.plot_text("Initialising this model: %s <br> on %d_%d_%d_%02.0d_%02.0d_%02.0d" %
-                                    (self.model_name,timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.minute,
-                                    timestamp.second), plot_name="Welcome")
-        except:
-            print("Unable to connect to visdom.")
+        if self.usevisdom and training:
+            try:
+                self.plotter = get_plotter(self.model_name)
+                self.plotter.plot_text("Initialising this model: %s <br> on %d_%d_%d_%02.0d_%02.0d_%02.0d" %
+                                        (self.model_name,timestamp.year, timestamp.month, timestamp.day, timestamp.hour, timestamp.minute,
+                                        timestamp.second), plot_name="Welcome")
+            except:
+                print("Unable to connect to visdom.")
 
         super().initialize(training, force_load_plans)
         if self.freeze:
             self.initialize_optimizer_and_scheduler_freezing()
 
-        if training:
+        if training and self.usevisdom:
             try:
                 self.plotter.plot_text("EPOCHS: %s <br> LEARNING RATE: %s <br> TRAINING KEYS: %s <br> VALIDATION KEYS: %s" % (str(self.max_num_epochs),str(self.initial_lr),str(self.dataset_tr.keys()),str(self.dataset_val.keys())), plot_name="Dataset_Info")
             except:
@@ -96,6 +100,14 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         #fig.savefig(join(self.output_folder, "progress.png"))
         plt.close()
         
+    def run_training(self):
+        ret = super().run_training()
+        if self.usevisdom:
+            try: 
+                self.plotter.close_client()
+            except:
+                print("Unable to connect to visdom.")
+        return ret
 
 
     def on_epoch_end(self):
@@ -104,12 +116,12 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
         :return:
         """
         continue_training = super().on_epoch_end()
-
-        try:
-            self.plot_to_visdom()
-            self.plotter.plot_text("Best epoch: %s<br> With eval criterion: %s <br>" % (self.best_epoch_based_on_MA_tr_loss, self.best_val_eval_criterion_MA), plot_name="Best_epoch")
-        except:
-            print("Unable to connect to visdom.")
+        if self.usevisdom:
+            try:
+                self.plot_to_visdom()
+                self.plotter.plot_text("Best epoch: %s<br> With eval criterion: %s <br>" % (self.best_epoch_based_on_MA_tr_loss, self.best_val_eval_criterion_MA), plot_name="Best_epoch")
+            except:
+                print("Unable to connect to visdom.")
         
         return continue_training
 

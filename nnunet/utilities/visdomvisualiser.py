@@ -151,5 +151,9 @@ class GenericVisdomPlotter(GenericPlotter):
         # plot the image
         self.figures[image_key] = self.viz.images(image, env=self.env, opts=dict(title=caption))
 
+    def close_client(self):
+
+        self.viz.use_socket = False
+
 
 

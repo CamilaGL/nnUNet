@@ -14,6 +14,7 @@
 
 
 import torch
+import torch.nn.functional as F
 from nnunet.training.loss_functions.TopK_loss import TopKLoss
 from nnunet.training.loss_functions.crossentropy import RobustCrossEntropyLoss
 from nnunet.utilities.nd_softmax import softmax_helper
@@ -183,18 +184,48 @@ class SoftDiceLoss(nn.Module):
         denominator = 2 * tp + fp + fn + self.smooth
 
         dc = nominator / (denominator + 1e-8)
-
+        print("Dice")
+        print(dc)
+        print(dc.shape)
         if not self.do_bg:
             if self.batch_dice:
                 dc = dc[1:]
             else:
                 dc = dc[:, 1:]
         dc = dc.mean()
-
+        print("Dice mean")
+        print(dc)
         return -dc
 
 # ------- added by Camila
 
+
+def soft_erode(I):
+    p1=-F.max_pool3d(-I, (3,1,1), (1,1,1), (1,0,0))
+    p2=-F.max_pool3d(-I, (1,3,1), (1,1,1), (0,1,0))
+    p3=-F.max_pool3d(-I, (1,1,3), (1,1,1), (0,0,1))
+    return torch.min(torch.min(p1,p3),p2)
+
+def soft_dilate(I):
+    return F.max_pool3d(I,(3,3,3), (1,1,1), (1,1,1))
+
+def soft_open(I):
+    return soft_dilate(soft_erode(I))
+
+def soft_skel(img, k=30):
+    img1 = soft_open(img)
+    skel = F.relu(img-img1)
+    for iter in range(k):
+        img = soft_erode(img)
+        img1 = soft_open(img)
+        delta = F.relu(img-img1)
+        skel = skel + F.relu(delta-skel*delta)
+    #del img1
+    #del delta
+    if torch.cuda.is_available():
+        del img1
+        del delta
+    return skel
 
 class SoftClDiceLoss(nn.Module):
     def __init__(self, apply_nonlin=None, batch_dice=False, do_bg=True, smooth=1., k=2):
@@ -230,11 +261,16 @@ class SoftClDiceLoss(nn.Module):
         if self.apply_nonlin is not None:
             x = self.apply_nonlin(x)
 
-        clp = self.softCenterline(x)
-        cll = self.softCenterline(y)
+        clp = soft_skel(x)
+        cll = soft_skel(y)
 
         tp, fp, fn, tn = get_tp_fp_fn_tn(x, cll, axes, loss_mask, False) #predicted against GT centerline
         tpc, fpc, fnc, tnc = get_tp_fp_fn_tn(clp, y, axes, loss_mask, False) #predicted centerline against GT
+
+        print (tp)
+        print(fn)
+        print(tpc)
+        print(fpc)
 
         clp2vollnom = tpc + self.smooth #intersection between prediction centerline and GT
         clp2vollden = tpc + fpc + self.smooth #all prediction centerline (all positives)
@@ -245,13 +281,24 @@ class SoftClDiceLoss(nn.Module):
         cll2volp = cll2volpnom/cll2volpden
 
         dc = (2*clp2voll*cll2volp) / (cll2volp+clp2voll + 1e-8)
+        print("ClDice")
+        print(dc)
+        print(dc.shape)
 
         if not self.do_bg:
             if self.batch_dice:
                 dc = dc[1:]
             else:
                 dc = dc[:, 1:]
+        print("ClDice postbg")
+        print(dc)
         dc = dc.mean()
+        print("ClDice mean")
+        print(dc)
+        print("ClDice precision: ")
+        print(cll2volp)
+        print("ClDice recall: ")
+        print(clp2voll)
         
         return -dc
 

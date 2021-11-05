@@ -96,6 +96,7 @@ def main():
     parser.add_argument("-freeze", type=int, required=False, default=0, help="use this to freeze layers, indicating how many are to be unfreezed")
     parser.add_argument("--clloss", action='store_true', required=False,default=False, help="use this to indicate centerline loss usage")
     parser.add_argument("--visdom", action='store_true', required=False,default=False, help="use this to indicate visdom usage")
+    parser.add_argument("--model_name", required=False, default=None, help="use this to set custom model name.")
     #--
 
     args = parser.parse_args()
@@ -143,13 +144,14 @@ def main():
     usevisdom = args.visdom
     if args.ft_task is None:
         ft_task = task
-    model_name = ""
-    if network_trainer == "mynnUNetTrainerV2":
+    model_name = args.model_name
+    if (network_trainer == "mynnUNetTrainerV2") and (model_name is None):
         if freeze==0:
             model_name = "_%s_%s_%s_%03.0d_%s_%s" % (ft_task,str(task),str(fold),epoch_number,str(learning_rate), str(clloss))
         else:
             model_name = "_%s_%s_UF%s_%s_%03.0d_%s_%s" % (ft_task,str(task),str(freeze),str(fold),epoch_number,str(learning_rate), str(clloss))
-
+    if model_name is None:
+        model_name = ""
     ##--
 
     # if force_separate_z == "None":
@@ -229,7 +231,7 @@ def main():
             if valbest:
                 trainer.load_best_checkpoint(train=False)
             else:
-                trainer.load_final_checkpoint(train=False)
+                trainer.load_final_checkpoint(train=False, model_name=model_name)
 
         trainer.network.eval()
 

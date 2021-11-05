@@ -184,17 +184,14 @@ class SoftDiceLoss(nn.Module):
         denominator = 2 * tp + fp + fn + self.smooth
 
         dc = nominator / (denominator + 1e-8)
-        print("Dice")
-        print(dc)
-        print(dc.shape)
+        
         if not self.do_bg:
             if self.batch_dice:
                 dc = dc[1:]
             else:
                 dc = dc[:, 1:]
         dc = dc.mean()
-        print("Dice mean")
-        print(dc)
+        
         return -dc
 
 # ------- added by Camila
@@ -212,7 +209,8 @@ def soft_dilate(I):
 def soft_open(I):
     return soft_dilate(soft_erode(I))
 
-def soft_skel(img, k=30):
+#This is the one that actually works, from the paper with supplementary material (!!!)
+def soft_skel(img, k=50):
     img1 = soft_open(img)
     skel = F.relu(img-img1)
     for iter in range(k):
@@ -267,11 +265,6 @@ class SoftClDiceLoss(nn.Module):
         tp, fp, fn, tn = get_tp_fp_fn_tn(x, cll, axes, loss_mask, False) #predicted against GT centerline
         tpc, fpc, fnc, tnc = get_tp_fp_fn_tn(clp, y, axes, loss_mask, False) #predicted centerline against GT
 
-        print (tp)
-        print(fn)
-        print(tpc)
-        print(fpc)
-
         clp2vollnom = tpc + self.smooth #intersection between prediction centerline and GT
         clp2vollden = tpc + fpc + self.smooth #all prediction centerline (all positives)
         clp2voll = clp2vollnom/clp2vollden
@@ -281,25 +274,15 @@ class SoftClDiceLoss(nn.Module):
         cll2volp = cll2volpnom/cll2volpden
 
         dc = (2*clp2voll*cll2volp) / (cll2volp+clp2voll + 1e-8)
-        print("ClDice")
-        print(dc)
-        print(dc.shape)
 
         if not self.do_bg:
             if self.batch_dice:
                 dc = dc[1:]
             else:
                 dc = dc[:, 1:]
-        print("ClDice postbg")
-        print(dc)
+       
         dc = dc.mean()
-        print("ClDice mean")
-        print(dc)
-        print("ClDice precision: ")
-        print(cll2volp)
-        print("ClDice recall: ")
-        print(clp2voll)
-        
+                
         return -dc
 
 class DC_and_ClDC_loss(nn.Module):
@@ -355,6 +338,74 @@ class DC_and_ClDC_loss(nn.Module):
         else:
             raise NotImplementedError("Not implemented") # reserved for other stuff (later)
         return result 
+
+
+
+class DC_and_ClDC_and_CE_loss(nn.Module):
+    def __init__(self, soft_dice_kwargs, soft_cldice_kwargs, ce_kwargs, aggregate="sum", square_dice=False, weight_ce=1, weight_dice=0.5, weight_cldice=0.5,
+                 log_dice=False, ignore_label=None):
+        """
+        CAREFUL. Weights for CE and Dice do not need to sum to one. You can set whatever you want. Weights for Dice and ClDice have to sum to one.
+        :param soft_dice_kwargs:
+        :param soft_cldice_kwargs:
+        :param ce_kwargs:
+        :param aggregate:
+        :param square_dice:
+        :param weight_ce:
+        :param weight_dice:
+        :param weight_cldice:
+        """
+        super(DC_and_ClDC_and_CE_loss, self).__init__()
+        if ignore_label is not None:
+            assert not square_dice, 'not implemented'
+            ce_kwargs['reduction'] = 'none'
+        self.log_dice = log_dice
+        self.weight_dice = weight_dice
+        self.weight_cldice = weight_cldice
+        self.weight_ce = weight_ce
+        self.aggregate = aggregate
+        self.ce = RobustCrossEntropyLoss(**ce_kwargs)
+
+        self.ignore_label = ignore_label
+
+        if not square_dice:
+            self.dc = SoftDiceLoss(apply_nonlin=softmax_helper, **soft_dice_kwargs)
+        else:
+            self.dc = SoftDiceLossSquared(apply_nonlin=softmax_helper, **soft_dice_kwargs)
+        self.cldc = SoftClDiceLoss(apply_nonlin=softmax_helper, **soft_cldice_kwargs)
+
+    def forward(self, net_output, target):
+        """
+        target must be b, c, x, y(, z) with c=1
+        :param net_output:
+        :param target:
+        :return:
+        """
+        if self.ignore_label is not None:
+            assert target.shape[1] == 1, 'not implemented for one hot encoding'
+            mask = target != self.ignore_label
+            target[~mask] = 0
+            mask = mask.float()
+        else:
+            mask = None
+
+        dc_loss = self.dc(net_output, target, loss_mask=mask) if self.weight_dice != 0 else 0
+        if self.log_dice:
+            dc_loss = -torch.log(-dc_loss)
+
+        cldc_loss = self.cldc(net_output, target, loss_mask=mask) if self.weight_cldice != 0 else 0
+
+        ce_loss = self.ce(net_output, target[:, 0].long()) if self.weight_ce != 0 else 0
+        if self.ignore_label is not None:
+            ce_loss *= mask[:, 0]
+            ce_loss = ce_loss.sum() / mask.sum()
+
+        if self.aggregate == "sum":
+            result = self.weight_ce * ce_loss + cldc_loss * self.weight_cldice + self.weight_dice * dc_loss
+        else:
+            raise NotImplementedError("nah son") # reserved for other stuff (later)
+        return result
+
 
 # --------- end added by Camila
 

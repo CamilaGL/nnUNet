@@ -4,7 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from datetime import datetime
 import torch
-from nnunet.training.loss_functions.dice_loss import DC_and_ClDC_loss
+from nnunet.training.loss_functions.dice_loss import DC_and_ClDC_loss, DC_and_ClDC_and_CE_loss
 
 class mynnUNetTrainerV2(nnUNetTrainerV2):
 
@@ -37,7 +37,8 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
 
     def set_clloss(self):
 
-        self.loss = DC_and_ClDC_loss({'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False}, {'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False, 'k': 5})
+        self.loss = DC_and_ClDC_and_CE_loss({'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False}, {'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False, 'k': 5}, {})
+        #self.loss = DC_and_ClDC_loss({'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False}, {'batch_dice': self.batch_dice, 'smooth': 1e-5, 'do_bg': False, 'k': 5})
 
     def initialize(self, training=True, force_load_plans=False):
         '''
@@ -142,13 +143,16 @@ class mynnUNetTrainerV2(nnUNetTrainerV2):
 
         #should do this for last self.unfreeze number of layers
         #not sure if last convtranspose before last computational block should be excluded?
-        # for param in self.network.tu[-1].parameters()
-        #     param.requires_grad = True 
+        for param in self.network.tu[-1].parameters():
+            print(param)
+            param.requires_grad = True 
         #last computational block
         for param in self.network.conv_blocks_localization[-1].parameters():
+            print(param)
             param.requires_grad = True 
         #last segmentation layer
         for param in self.network.seg_outputs[-1].parameters():
+            print(param)
             param.requires_grad = True 
 
         # print("\n\n ------------------ not frozen --------------------")

@@ -25,6 +25,7 @@ import SimpleITK as sitk
 from nnunet.evaluation.metrics import ConfusionMatrix, ALL_METRICS
 from batchgenerators.utilities.file_and_folder_operations import save_json, subfiles, join
 from collections import OrderedDict
+from skimage.morphology import skeletonize
 
 
 class Evaluator:
@@ -52,7 +53,12 @@ class Evaluator:
         "False Positives",
         "True Negatives",
         "False Negatives",
-        "clDice"
+        "clDice",
+        "clRecall",
+        "clPrecision",
+        "clDiceski",
+        "clRecallski",
+        "clPrecisionski"
     ]
 
     default_advanced_metrics = [
@@ -223,6 +229,8 @@ class Evaluator:
                     # --- added by Camila
                     self.confusion_matrix.set_testcl(self.testcl == label)
                     self.confusion_matrix.set_referencecl(self.referencecl == label)
+                    self.confusion_matrix.set_skirefcl(skeletonize(self.reference)==label)
+                    self.confusion_matrix.set_skitestcl(skeletonize(self.test)==label)
                     ## ------------------
                 else:
                     current_test = 0
@@ -247,6 +255,8 @@ class Evaluator:
                 # --- added by Camila
                 self.confusion_matrix.set_testcl(self.testcl == l)
                 self.confusion_matrix.set_referencecl(self.referencecl == l)
+                self.confusion_matrix.set_skirefcl(skeletonize(self.reference)==l)
+                self.confusion_matrix.set_skitestcl(skeletonize(self.test)==l)
                 ## ------------------
                 for metric in eval_metrics:
                     self.result[k][metric] = _funcs[metric](confusion_matrix=self.confusion_matrix,

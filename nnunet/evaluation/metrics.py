@@ -14,6 +14,7 @@
 
 import numpy as np
 from medpy import metric
+from skimage.morphology import skeletonize
 
 
 def assert_shape(test, reference):
@@ -37,6 +38,8 @@ class ConfusionMatrix:
         self.test_full = None
         self.set_reference(reference)
         self.set_test(test)
+        self.skirefcl = None
+        self.skitestcl = None
 
     def set_test(self, test):
 
@@ -57,13 +60,44 @@ class ConfusionMatrix:
     def set_referencecl(self, referencecl):
 
         self.referencecl = referencecl
-        self. resetcl()
+        self.resetcl()
 
     def resetcl(self):
         self.clp2vollintersect = None
         self.clp2volltotalcl = None
         self.cll2volpintersect = None
         self.cll2volptotalcl = None
+
+    def set_skirefcl(self, refcl):
+        self.skirefcl=refcl
+        self.resetclski()
+    
+    def set_skitestcl(self, testcl):
+        self.skitestcl=testcl
+        self.resetclski()
+
+    def resetclski(self):
+        self.clp2vollintersectski = None
+        self.clp2volltotalclski = None
+        self.cll2volpintersectski = None
+        self.cll2volptotalclski = None
+
+    # def computeSkiCl(self):
+    #     if self.test is not None:
+    #         self.skitestcl = skeletonize(self.test)
+    #         if self.skitestcl is None:
+    #             print("test no skeletonizo")
+    #     if self.reference is not None:
+    #         self.skirefcl = skeletonize(self.reference)
+    #         if self.skirefcl is None:
+    #             print("ref no skeletonizo")
+    #     if (self.skirefcl is None):
+    #         print("ref no está")
+    #     if (self.skitestcl is None):
+    #         print("test no está")
+
+
+
     # ------------------------
     
 
@@ -142,6 +176,26 @@ class ConfusionMatrix:
                 break
 
         return self.clp2vollintersect, self.clp2volltotalcl, self.cll2volpintersect, self.cll2volptotalcl
+
+    def compute_skiclDice(self):
+        if self.skitestcl is not None and self.skirefcl is not None:
+            self.clp2vollintersectski = int(((self.skitestcl != 0) * (self.reference != 0)).sum())
+            self.clp2volltotalclski = int((self.skitestcl!=0).sum())
+            self.cll2volpintersectski = int(((self.skirefcl != 0) * (self.test != 0)).sum())
+            self.cll2volptotalclski = int((self.skirefcl!=0).sum())
+        else:
+            self.clp2vollintersectski = 0
+            self.clp2volltotalclski = 0
+            self.cll2volpintersectski = 0
+            self.cll2volptotalclski = 0
+
+    def get_skiclvalues(self):
+        for entry in ( self.clp2vollintersectski, self.clp2volltotalclski, self.cll2volpintersectski, self.cll2volptotalclski):
+            if entry is None:
+                self.compute_skiclDice()
+                break
+
+        return self.clp2vollintersectski, self.clp2volltotalclski, self.cll2volpintersectski, self.cll2volptotalclski
     # --------------------------------
 
 def dice(test=None, reference=None, confusion_matrix=None, nan_for_nonexisting=True, **kwargs):
@@ -504,7 +558,48 @@ def clDice(test=None, reference=None, confusion_matrix=None, **kwargs):
     cll2volp= float(cll2volpintersect/cll2volptotalcl)
     return ((2*cll2volp*clp2voll)/(clp2voll+cll2volp))
 
+def skiClPrecision(test=None, reference=None, confusion_matrix=None, **kwargs):
+    #with skimage skeletonize
+    """cl precision"""
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
 
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_skiclvalues()
+    #print("precision")
+    #print ("%s voxels intersect" % str(cll2volpintersect))
+    #print ("%s voxels are centerline" % str(cll2volptotalcl))
+    cll2volp= float(cll2volpintersect/cll2volptotalcl)
+    return cll2volp
+
+def skiClRecall(test=None, reference=None, confusion_matrix=None, **kwargs):
+    #with skimage skeletonize
+    """cl recall"""
+
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_skiclvalues()
+
+    #print("recall")
+    #print ("%s voxels intersect" % str(clp2vollintersect))
+    #print ("%s voxels are centerline" % str(clp2volltotalcl))
+    clp2voll = float(clp2vollintersect/clp2volltotalcl)
+    return clp2voll
+
+
+def skiClDice(test=None, reference=None, confusion_matrix=None, **kwargs):
+    #with skimage skeletonize
+    """clDice (paper reference)"""
+    if confusion_matrix is None:
+        confusion_matrix = ConfusionMatrix(test, reference)
+
+    clp2vollintersect, clp2volltotalcl, cll2volpintersect, cll2volptotalcl = confusion_matrix.get_skiclvalues()
+    #recall
+    clp2voll = float(clp2vollintersect/clp2volltotalcl)
+    #precision
+    cll2volp= float(cll2volpintersect/cll2volptotalcl)
+    return ((2*cll2volp*clp2voll)/(clp2voll+cll2volp))
+    
 ## ------------- end added by Camila
 
 
@@ -533,5 +628,10 @@ ALL_METRICS = {
     "False Positives": false_positives,
     "True Negatives": true_negatives,
     "False Negatives": false_negatives,
-    "clDice": clDice
+    "clDice": clDice,
+    "clRecall": clrecall,
+    "clPrecision": clprecision,
+    "clDiceski": skiClDice,
+    "clRecallski": skiClRecall,
+    "clPrecisionski": skiClPrecision
 }

@@ -97,6 +97,7 @@ def main():
     parser.add_argument("--clloss", action='store_true', required=False,default=False, help="use this to indicate centerline loss usage")
     parser.add_argument("--visdom", action='store_true', required=False,default=False, help="use this to indicate visdom usage")
     parser.add_argument("--model_name", required=False, default=None, help="use this to set custom model name.")
+    parser.add_argument("--celoss", action='store_true', required=False,default=False, help="use this to indicate exclusively CE loss usage")
     #--
 
     args = parser.parse_args()
@@ -141,6 +142,7 @@ def main():
     ft_task = args.ft_task
     freeze = args.freeze
     clloss = args.clloss
+    celoss = args.celoss
     usevisdom = args.visdom
     if args.ft_task is None:
         ft_task = task
@@ -192,7 +194,8 @@ def main():
 
 
     ##-- zxc Added by Camila
-    if network_trainer == "mynnUNetTrainerV2":
+    #if network_trainer == "mynnUNetTrainerV2":
+    if "mynnUNetTrainerV2" in network_trainer:
         if epoch_number:
             trainer.set_epochs(epoch_number)
         if learning_rate:
@@ -202,6 +205,8 @@ def main():
             trainer.set_freeze(freeze)
         if clloss:
             trainer.set_clloss()
+        if celoss:
+            trainer.set_celoss()
         if usevisdom:
             trainer.set_visdom()
     ##--

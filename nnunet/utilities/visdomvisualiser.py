@@ -76,7 +76,7 @@ class GenericVisdomPlotter(GenericPlotter):
         # prepare the environment name
         self.env = 'Cami_' + config
         # default host and port
-        hostname = '192.168.7.23' # "deep"
+        hostname = 'deep' # "deep"
         baseurl = "/visdom"
         myport = 80
         # replace host and port by the one provided in the config file

@@ -121,6 +121,10 @@ def main():
                         help='Predictions are done with mixed precision by default. This improves speed and reduces '
                              'the required vram. If you want to disable mixed precision you can set this flag. Note '
                              'that yhis is not recommended (mixed precision is ~2x faster!)')
+    ### ----------- added by Camila
+    parser.add_argument('--disable_sliding_window', default=False, action='store_true', required=False,
+                        help='Disable sliding window to predict the whole image')
+    ### ----------- end added by Camila
 
     args = parser.parse_args()
     input_folder = args.input_folder
@@ -143,6 +147,9 @@ def main():
     model = args.model
     trainer_class_name = args.trainer_class_name
     cascade_trainer_class_name = args.cascade_trainer_class_name
+    ### ----------- added by Camila
+    disable_sliding_window=args.disable_sliding_window
+    ### ----------- end added by Camila
 
     task_name = args.task_name
 
@@ -199,7 +206,7 @@ def main():
                             num_threads_preprocessing, num_threads_nifti_save, None, part_id, num_parts, not disable_tta,
                             overwrite_existing=overwrite_existing, mode=mode, overwrite_all_in_gpu=all_in_gpu,
                             mixed_precision=not args.disable_mixed_precision,
-                            step_size=step_size)
+                            step_size=step_size, disable_sliding_window=disable_sliding_window)
         lowres_segmentations = lowres_output_folder
         torch.cuda.empty_cache()
         print("3d_lowres done")
@@ -218,7 +225,7 @@ def main():
                         num_threads_nifti_save, lowres_segmentations, part_id, num_parts, not disable_tta,
                         overwrite_existing=overwrite_existing, mode=mode, overwrite_all_in_gpu=all_in_gpu,
                         mixed_precision=not args.disable_mixed_precision,
-                        step_size=step_size, checkpoint_name=args.chk)
+                        step_size=step_size, checkpoint_name=args.chk, disable_sliding_window=disable_sliding_window)
 
 
 if __name__ == "__main__":

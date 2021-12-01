@@ -192,7 +192,7 @@ class SoftDiceLoss(nn.Module):
                 dc = dc[:, 1:]
         dc = dc.mean()
         
-        return -dc
+        return 1-dc
 
 # ------- added by Camila
 
@@ -283,7 +283,7 @@ class SoftClDiceLoss(nn.Module):
        
         dc = dc.mean()
                 
-        return -dc
+        return 1-dc
 
 class DC_and_ClDC_loss(nn.Module):
     def __init__(self, soft_dice_kwargs, soft_cldice_kwargs, aggregate="sum", square_dice=False, weight_cldice=0.5, weight_dice=0.5,
@@ -337,7 +337,7 @@ class DC_and_ClDC_loss(nn.Module):
             result = self.weight_cldice * cldc_loss + self.weight_dice * dc_loss
         else:
             raise NotImplementedError("Not implemented") # reserved for other stuff (later)
-        return result 
+        return result, {'cldc_loss': cldc_loss.detach().cpu().numpy(), 'dc_loss': dc_loss.detach().cpu().numpy()} 
 
 
 
@@ -404,7 +404,49 @@ class DC_and_ClDC_and_CE_loss(nn.Module):
             result = self.weight_ce * ce_loss + cldc_loss * self.weight_cldice + self.weight_dice * dc_loss
         else:
             raise NotImplementedError("nah son") # reserved for other stuff (later)
-        return result
+        return result, {'ce_loss': ce_loss.detach().cpu().numpy(), 'cldc_loss': cldc_loss.detach().cpu().numpy(), 'dc_loss': dc_loss.detach().cpu().numpy()}
+
+class Only_CE_loss(nn.Module):
+    def __init__(self, ce_kwargs, ignore_label=None):
+        """
+        CAREFUL. Weights for CE and Dice do not need to sum to one. You can set whatever you want.
+        :param soft_dice_kwargs:
+        :param ce_kwargs:
+        :param aggregate:
+        :param square_dice:
+        :param weight_ce:
+        :param weight_dice:
+        """
+        super(Only_CE_loss, self).__init__()
+        if ignore_label is not None:
+            ce_kwargs['reduction'] = 'none'
+        self.ce = RobustCrossEntropyLoss(**ce_kwargs)
+
+        self.ignore_label = ignore_label
+
+
+    def forward(self, net_output, target):
+        """
+        target must be b, c, x, y(, z) with c=1
+        :param net_output:
+        :param target:
+        :return:
+        """
+        if self.ignore_label is not None:
+            assert target.shape[1] == 1, 'not implemented for one hot encoding'
+            mask = target != self.ignore_label
+            target[~mask] = 0
+            mask = mask.float()
+        else:
+            mask = None
+
+        ce_loss = self.ce(net_output, target[:, 0].long())
+        if self.ignore_label is not None:
+            ce_loss *= mask[:, 0]
+            ce_loss = ce_loss.sum() / mask.sum()
+
+        result = ce_loss
+        return result, {'ce_loss': ce_loss.detach().cpu().numpy()}
 
 
 # --------- end added by Camila
@@ -573,7 +615,7 @@ class DC_and_CE_loss(nn.Module):
             result = self.weight_ce * ce_loss + self.weight_dice * dc_loss
         else:
             raise NotImplementedError("nah son") # reserved for other stuff (later)
-        return result
+        return result, {'ce_loss': ce_loss.detach().cpu().numpy(), 'dc_loss': dc_loss.detach().cpu().numpy()}
 
 
 class DC_and_BCE_loss(nn.Module):

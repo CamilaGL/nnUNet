@@ -129,6 +129,8 @@ class NetworkTrainer(object):
         ## ------- zxc Added by Camila
         # save models with name according to parameters
         self.model_name = ""
+        self.all_parts_tr_losses = {}
+        self.all_parts_val_losses = {}
         ## -------
 
     @abstractmethod
@@ -445,6 +447,7 @@ class NetworkTrainer(object):
             self.print_to_log_file("\nepoch: ", self.epoch)
             epoch_start_time = time()
             train_losses_epoch = []
+            parts_train_losses_epoch = {}
 
             # train one epoch
             self.network.train()
@@ -454,34 +457,56 @@ class NetworkTrainer(object):
                     for b in tbar:
                         tbar.set_description("Epoch {}/{}".format(self.epoch+1, self.max_num_epochs))
 
-                        l = self.run_iteration(self.tr_gen, True)
-
+                        l, lossparts = self.run_iteration(self.tr_gen, True) #lossparts zxc
+                        for p in lossparts:
+                            if not p in parts_train_losses_epoch:
+                                parts_train_losses_epoch[p] = []
+                            parts_train_losses_epoch[p].append(lossparts[p])
                         tbar.set_postfix(loss=l)
                         train_losses_epoch.append(l)
             else:
                 for _ in range(self.num_batches_per_epoch):
-                    l = self.run_iteration(self.tr_gen, True)
+                    l, lossparts = self.run_iteration(self.tr_gen, True)
+                    for p in lossparts:
+                        if not p in parts_train_losses_epoch:
+                            parts_train_losses_epoch[p] = []
+                        parts_train_losses_epoch[p].append(lossparts[p])
                     train_losses_epoch.append(l)
 
             self.all_tr_losses.append(np.mean(train_losses_epoch))
             self.print_to_log_file("train loss : %.4f" % self.all_tr_losses[-1])
+            for p in parts_train_losses_epoch:
+                if not p in self.all_parts_tr_losses:
+                    self.all_parts_tr_losses[p] = []
+                self.all_parts_tr_losses[p].append(np.mean(parts_train_losses_epoch[p]))
+                self.print_to_log_file("%s : %.4f" % (p,self.all_parts_tr_losses[p][-1]))
 
             with torch.no_grad():
                 # validation with train=False
                 self.network.eval()
                 val_losses = []
+                parts_val_losses_epoch = {}
                 for b in range(self.num_val_batches_per_epoch):
-                    l = self.run_iteration(self.val_gen, False, True)
+                    l, lossparts = self.run_iteration(self.val_gen, False, True)
+                    for p in lossparts:
+                        if not p in parts_val_losses_epoch:
+                            parts_val_losses_epoch[p] = []
+                        parts_val_losses_epoch[p].append(lossparts[p])
                     val_losses.append(l)
                 self.all_val_losses.append(np.mean(val_losses))
                 self.print_to_log_file("validation loss: %.4f" % self.all_val_losses[-1])
+                for p in parts_val_losses_epoch:
+                    if not p in self.all_parts_val_losses:
+                        self.all_parts_val_losses[p] = []
+                    self.all_parts_val_losses[p].append(np.mean(parts_val_losses_epoch[p]))
+                    self.print_to_log_file("%s : %.4f" % (p,self.all_parts_val_losses[p][-1]))
 
                 if self.also_val_in_tr_mode:
                     self.network.train()
                     # validation with train=True
                     val_losses = []
                     for b in range(self.num_val_batches_per_epoch):
-                        l = self.run_iteration(self.val_gen, False)
+                        l, lossparts = self.run_iteration(self.val_gen, False)
                         val_losses.append(l)
                     self.all_val_losses_tr_mode.append(np.mean(val_losses))
                     self.print_to_log_file("validation loss (train=True): %.4f" % self.all_val_losses_tr_mode[-1])
@@ -649,7 +674,7 @@ class NetworkTrainer(object):
             with autocast():
                 output = self.network(data)
                 del data
-                l = self.loss(output, target)
+                l, lossparts = self.loss(output, target) # , lossparts added by Camila zxc
 
             if do_backprop:
                 self.amp_grad_scaler.scale(l).backward()
@@ -658,7 +683,7 @@ class NetworkTrainer(object):
         else:
             output = self.network(data)
             del data
-            l = self.loss(output, target)
+            l, lossparts = self.loss(output, target) # , lossparts added by Camila zxc
 
             if do_backprop:
                 l.backward()
@@ -669,7 +694,7 @@ class NetworkTrainer(object):
 
         del target
 
-        return l.detach().cpu().numpy()
+        return l.detach().cpu().numpy(), lossparts
 
     def run_online_evaluation(self, *args, **kwargs):
         """

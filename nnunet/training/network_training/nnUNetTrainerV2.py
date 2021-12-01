@@ -246,7 +246,7 @@ class nnUNetTrainerV2(nnUNetTrainer):
             with autocast():
                 output = self.network(data)
                 del data
-                l = self.loss(output, target)
+                l, lossparts = self.loss(output, target)
 
             if do_backprop:
                 self.amp_grad_scaler.scale(l).backward()
@@ -257,7 +257,7 @@ class nnUNetTrainerV2(nnUNetTrainer):
         else:
             output = self.network(data)
             del data
-            l = self.loss(output, target)
+            l, lossparts = self.loss(output, target)
 
             if do_backprop:
                 l.backward()
@@ -269,7 +269,7 @@ class nnUNetTrainerV2(nnUNetTrainer):
 
         del target
 
-        return l.detach().cpu().numpy()
+        return l.detach().cpu().numpy(), lossparts
 
     def do_split(self):
         """
